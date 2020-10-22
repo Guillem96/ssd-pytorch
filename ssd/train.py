@@ -1,4 +1,5 @@
 import click
+import yaml
 from pathlib import Path
 
 import torch
@@ -16,6 +17,9 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 @click.option('--dataset-root', required=True, 
               type=click.Path(exists=True, file_okay=False),
               help='Dataset root directory path')
+@click.option('--config',
+              required=True, type=click.Path(exists=True, dir_okay=False),
+              help='Configuration regarding dataset')
 @click.option('--basenet', 
               default='vgg16_reducedfc.pth', 
               type=click.Path(exists=True, dir_okay=False),
@@ -42,34 +46,31 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 @click.option('--step-size', default=4, type=int,
               help='Decrease the learning rate by gamma after n epochs steps')
 
-def train(dataset, dataset_root,
+def train(dataset, dataset_root, config,
           basenet, checkpoint, save_dir,
           epochs, batch_size, num_workers,
           lr, momentum, wd, gamma, step_size):
-    
+
     dataset_root = Path(dataset_root)
     basenet = Path(basenet)
     checkpoint = Path(checkpoint) if checkpoint is not None else None
     save_dir = Path(save_dir)
     save_dir.mkdir(exist_ok=True, parents=True)
+    
+    cfg = yaml.safe_load(open(config))
+    transform = T.get_transforms(cfg['image-size'], training=True)
 
     if dataset == 'COCO':
-        cfg = ssd.data.config.coco
-        transform = T.get_transforms(cfg['min_dim'], training=True)
         dataset = ssd.data.COCODetection(root=dataset_root,
                                          transform=transform)
     elif dataset == 'VOC':
-        cfg = ssd.data.config.voc
-        transform = T.get_transforms(cfg['min_dim'], training=True)
         dataset = ssd.data.VOCDetection(root=dataset_root,
                                         transform=transform)
     else:
-        cfg = ssd.data.config.labelme
-        transform = T.get_transforms(cfg['min_dim'], training=True)
         dataset = ssd.data.LabelmeDataset(root=dataset_root,
                                           transform=transform)
 
-    model = ssd.ssd(cfg, cfg['min_dim'], cfg['num_classes'])
+    model = ssd.ssd(cfg, cfg['image-size'], cfg['num-classes'])
     if checkpoint is not None:
         print(f'Resuming training, loading {str(checkpoint)}...')
         checkpoint = torch.load(checkpoint)

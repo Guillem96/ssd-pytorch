@@ -1,5 +1,6 @@
 import cv2
 
+import torch
 import numpy as np
 
 
@@ -14,4 +15,4 @@ def caffe_preprocessing(image, size, mean=MEANS):
 
 
 def np_to_tensor(image):
-    return torch.from_numpy(img).permute(2, 0, 1)
+    return torch.from_numpy(image).permute(2, 0, 1)

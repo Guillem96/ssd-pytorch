@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import numpy.random as random
 
-from .functional import caffe_preprocessing
+from .functional import caffe_preprocessing, np_to_tensor
 
 
 MEANS = (104, 117, 123)
@@ -378,8 +378,14 @@ class PhotometricDistort(object):
         return self.rand_light_noise(im, boxes, labels)
 
 
-def get_transforms(size, mean=MEANS, training=True):
-    if training:
+def get_transforms(size, mean=MEANS, training=True, inference=False):
+    if inference:
+        def tfm(im):
+            im = caffe_preprocessing(im, size)
+            return np_to_tensor(im)
+        return tfm
+
+    elif training:
         return Compose([
             ConvertFromInts(),
             ToAbsoluteCoords(),

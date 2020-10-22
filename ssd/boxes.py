@@ -2,6 +2,7 @@ from math import sqrt
 from itertools import product
 
 import torch
+import torchvision
 
 
 class PriorBox(object):
@@ -10,17 +11,18 @@ class PriorBox(object):
     """
     def __init__(self, cfg):
         super(PriorBox, self).__init__()
-        self.image_size = cfg['min_dim']
+        self.image_size = cfg['image-size']
 
         # number of priors for feature map location (either 4 or 6)
-        self.num_priors = len(cfg['aspect_ratios'])
+        pb_cfg = cfg['prior-boxes']
+        self.num_priors = len(pb_cfg['aspect-ratios'])
         self.variance = [0.1, 0.2]
-        self.feature_maps = cfg['feature_maps']
-        self.min_sizes = cfg['min_sizes']
-        self.max_sizes = cfg['max_sizes']
-        self.steps = cfg['steps']
-        self.aspect_ratios = cfg['aspect_ratios']
-        self.clip = cfg['clip']
+        self.feature_maps = pb_cfg['feature-maps']
+        self.min_sizes = pb_cfg['min-sizes']
+        self.max_sizes = pb_cfg['max-sizes']
+        self.steps = pb_cfg['steps']
+        self.aspect_ratios = pb_cfg['aspect-ratios']
+        self.clip = pb_cfg['clip']
         self.version = cfg['name']
 
         if any(v <= 0 for v in self.variance):
@@ -84,9 +86,12 @@ class Detect(object):
             prior_data: (tensor) Prior boxes and variances from priorbox layers
                 Shape: [1,num_priors,4]
         """
+        device = loc_data.device
+
         num = loc_data.size(0)  # batch size
         num_priors = prior_data.size(0)
-        output = torch.zeros(num, self.num_classes, self.top_k, 5)
+        output = torch.zeros(num, self.num_classes, self.top_k, 5, 
+                             device=device)
         conf_preds = conf_data.view(num, num_priors,
                                     self.num_classes).transpose(2, 1)
 
@@ -101,17 +106,23 @@ class Detect(object):
                 scores = conf_scores[cl][c_mask]
                 if scores.size(0) == 0:
                     continue
+
                 l_mask = c_mask.unsqueeze(1).expand_as(decoded_boxes)
                 boxes = decoded_boxes[l_mask].view(-1, 4)
                 # idx of highest scoring and non-overlapping boxes per class
-                ids, count = nms(boxes, scores, self.nms_thresh, self.top_k)
+                ids = torchvision.ops.nms(boxes, scores, self.nms_thresh)
+                ids = ids[:self.top_k]
+                count = len(ids)
+
                 output[i, cl, :count] = \
                     torch.cat((scores[ids[:count]].unsqueeze(1),
                                boxes[ids[:count]]), 1)
         flt = output.contiguous().view(num, -1, 5)
+
         _, idx = flt[:, :, 0].sort(1, descending=True)
         _, rank = idx.sort(1)
         flt[(rank < self.top_k).unsqueeze(-1).expand_as(flt)].fill_(0)
+
         return output
 
 

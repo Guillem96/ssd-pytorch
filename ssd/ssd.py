@@ -70,9 +70,8 @@ class SSD(nn.Module):
                     2: localization layers, Shape: [batch,num_priors*4]
                     3: priorbox layers, Shape: [2,num_priors*4]
         """
-        sources = list()
-        loc = list()
-        conf = list()
+        device = x.device
+        sources = []
 
         # apply vgg up to conv4_3 relu
         for k in range(23):
@@ -93,9 +92,10 @@ class SSD(nn.Module):
                 sources.append(x)
 
         # apply multibox head to source layers
-        for x, l, c in zip(sources, self.loc, self.conf):
-            loc.append(l(x).permute(0, 2, 3, 1).contiguous())
-            conf.append(c(x).permute(0, 2, 3, 1).contiguous())
+        loc = [l(x).permute(0, 2, 3, 1).contiguous() 
+               for x, l in zip(sources, self.loc)]
+        conf = [c(x).permute(0, 2, 3, 1).contiguous() 
+                for x, c in zip(sources, self.conf)]
 
         loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
@@ -104,9 +104,10 @@ class SSD(nn.Module):
         conf = conf.view(conf.size(0), -1, self.num_classes)
 
         if not self.training:
-            output = self.detect(loc, F.softmax(conf, -1), self.priors.float())
+            conf = F.softmax(conf, -1)
+            output = self.detect(loc, conf, self.priors.float().to(device))
         else:
-            output = loc, conf, self.priors
+            output = loc, conf, self.priors.to(device)
 
         return output
 
