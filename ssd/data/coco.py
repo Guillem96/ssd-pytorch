@@ -6,7 +6,7 @@ import torch
 import cv2
 import numpy as np
 
-from ssd.transforms.functional as F
+import ssd.transforms.functional as F
 
 
 COCO_CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
@@ -85,7 +85,7 @@ class COCODetection(torch.utils.data.Dataset):
                  root,
                  image_set='trainval35k',
                  transform=None,
-                 target_transform=COCOAnnotationTransform(),
+                 target_transform=None,
                  dataset_name='MS COCO'):
         try:
             from pycocotools.coco import COCO
@@ -101,6 +101,9 @@ class COCODetection(torch.utils.data.Dataset):
         self.transform = transform
         self.target_transform = target_transform
         self.name = dataset_name
+
+        if self.target_transform is None:
+            self.target_transform = COCOAnnotationTransform(root)
 
     def __getitem__(self, index):
         """
@@ -129,7 +132,7 @@ class COCODetection(torch.utils.data.Dataset):
         ann_ids = self.coco.getAnnIds(imgIds=img_id)
 
         target = self.coco.loadAnns(ann_ids)
-        path = self.root / self.coco.loadImgs(img_id)[0]['file_name'])
+        path = self.root / self.coco.loadImgs(img_id)[0]['file_name']
         assert path.exists(), f'Image path does not exist: {str(path)}'
 
         img = cv2.imread(str(path))

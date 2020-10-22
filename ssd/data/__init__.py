@@ -1,16 +1,8 @@
 from .voc0712 import VOCDetection, VOCAnnotationTransform, VOC_CLASSES
-
 from .coco import COCODetection, COCOAnnotationTransform, COCO_CLASSES, get_label_map
-from .config import *
+from .labelme import LabelmeDataset
+
 import torch
-import cv2
-import numpy as np
-
-# for making bounding boxes pretty
-COLORS = ((255, 0, 0, 128), (0, 255, 0, 128), (0, 0, 255, 128),
-          (0, 255, 255, 128), (255, 0, 255, 128), (255, 255, 0, 128))
-
-MEANS = (104, 117, 123)
 
 
 def detection_collate(batch):

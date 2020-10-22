@@ -2,7 +2,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from data.config import coco as cfg
 from ..boxes import match
 
 
@@ -48,6 +47,7 @@ class MultiBoxLoss(nn.Module):
                 shape: [batch_size,num_objs,5] (last idx is the label).
         """
         loc_data, conf_data, priors = predictions
+        device = loc_data.device
 
         bs = loc_data.size(0)
         priors = priors[:loc_data.size(1), :]
@@ -55,13 +55,13 @@ class MultiBoxLoss(nn.Module):
         num_classes = conf_data.size(-1)
 
         # match priors (default boxes) and ground truth boxes
-        loc_t = torch.zeros(bs, num_priors, 4, device=loc_data.device)
-        conf_t = torch.zeros(bs, num_priors, device=loc_data.device).long()
+        loc_t = torch.zeros(bs, num_priors, 4, device=device)
+        conf_t = torch.zeros(bs, num_priors, device=device).long()
 
         for idx in range(bs):
             truths = targets[idx][:, :-1]
             labels = targets[idx][:, -1]
-            defaults = priors.data
+            defaults = priors.to(device)
             match(self.threshold, truths, defaults, self.variance, labels,
                   loc_t, conf_t, idx)
 
@@ -75,7 +75,7 @@ class MultiBoxLoss(nn.Module):
         loss_l = F.smooth_l1_loss(loc_p, loc_t, reduction='sum')
 
         # Compute classification loss
-        loss_c = F.cross_entropy(loc_data.view(-1, num_classes), 
+        loss_c = F.cross_entropy(conf_data.view(-1, num_classes), 
                                  conf_t.view(-1),
                                  reduction='none')
         loss_c = loss_c.view(bs, num_priors)
@@ -87,9 +87,9 @@ class MultiBoxLoss(nn.Module):
         # top negative losses
         num_neg = torch.clamp(self.negpos_ratio * num_pos, 
                               max=pos.size(1) - 1)
-        loss_c_neg = loss_c[~pos]
+        loss_c_neg = loss_c * ~pos
         neg_mask = torch.zeros_like(loss_c_neg)
-        neg_mask[torch.arange(bs), num_neg] = 1.
+        neg_mask[torch.arange(bs), num_neg.view(-1)] = 1.
         neg_mask = 1 - neg_mask.cumsum(-1)
         loss_c_neg = (loss_c_neg * neg_mask).sum()
 

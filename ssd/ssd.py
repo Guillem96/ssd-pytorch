@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .nn import L2Norm
-from ..boxes import Detect, PriorBox
+from .boxes import Detect, PriorBox
 
 
 class SSD(nn.Module):
@@ -29,7 +29,7 @@ class SSD(nn.Module):
         self.num_classes = num_classes
         self.cfg = cfg
         self.priorbox = PriorBox(self.cfg)
-        self.priors = Variable(self.priorbox.forward(), volatile=True)
+        self.priors = self.priorbox.forward()
         self.size = size
 
         # SSD network
@@ -43,6 +43,13 @@ class SSD(nn.Module):
         self.conf = nn.ModuleList(head[1])
 
         self.detect = Detect(num_classes, 0, 200, 0.01, 0.45)
+
+        self.apply(self._weights_init)
+
+    def _weights_init(self, m):
+        if isinstance(m, nn.Conv2d):
+            nn.init.xavier_uniform_(m.weight)
+            nn.init.zeros_(m.bias)
 
     def forward(self, x):
         """Applies network layers and ops on input image(s) x.
@@ -94,10 +101,10 @@ class SSD(nn.Module):
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
 
         loc = loc.view(loc.size(0), -1, 4)
-        conf.view(conf.size(0), -1, self.num_classes)
+        conf = conf.view(conf.size(0), -1, self.num_classes)
 
         if not self.training:
-            output = self.detect(loc, F.softmax(conf, -1), self.priors.float()))
+            output = self.detect(loc, F.softmax(conf, -1), self.priors.float())
         else:
             output = loc, conf, self.priors
 
@@ -178,10 +185,7 @@ mbox = {
 }
 
 
-def ssd(phase, cfg, size=300, num_classes=21):
-    if phase != "test" and phase != "train":
-        print("ERROR: Phase: " + phase + " not recognized")
-        return
+def ssd(cfg, size=300, num_classes=21):
     if size != 300:
         print("ERROR: You specified size " + repr(size) + ". However, " +
               "currently only SSD300 (size=300) is supported!")
@@ -189,4 +193,4 @@ def ssd(phase, cfg, size=300, num_classes=21):
     base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
                                      add_extras(extras[str(size)], 1024),
                                      mbox[str(size)], num_classes)
-    return SSD(phase, size, base_, extras_, head_, num_classes, cfg)
+    return SSD(size, base_, extras_, head_, num_classes, cfg)

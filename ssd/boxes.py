@@ -14,7 +14,7 @@ class PriorBox(object):
 
         # number of priors for feature map location (either 4 or 6)
         self.num_priors = len(cfg['aspect_ratios'])
-        self.variance = cfg['variance'] or [0.1]
+        self.variance = [0.1, 0.2]
         self.feature_maps = cfg['feature_maps']
         self.min_sizes = cfg['min_sizes']
         self.max_sizes = cfg['max_sizes']
@@ -57,11 +57,6 @@ class PriorBox(object):
         return output
 
 
-import torch
-from ..box_utils import decode, nms
-from data import voc as cfg
-
-
 class Detect(object):
     """At test time, Detect is the final layer of SSD.  Decode location preds,
     apply non-maximum suppression to location predictions based on conf
@@ -77,7 +72,7 @@ class Detect(object):
         if nms_thresh <= 0:
             raise ValueError('nms_threshold must be non negative.')
         self.conf_thresh = conf_thresh
-        self.variance = cfg['variance']
+        self.variance = [0.1, 0.2]
 
     def __call__(self, loc_data, conf_data, prior_data):
         """

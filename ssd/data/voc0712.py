@@ -7,7 +7,7 @@ import numpy as np
 
 import xml.etree.ElementTree as ET
 
-from ssd.transforms.functional as F
+import ssd.transforms.functional as F
 
 
 VOC_CLASSES = (  # always index 0
