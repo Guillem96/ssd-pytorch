@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import torch
+import torch.utils.data as data
 
 import cv2
 import numpy as np
@@ -9,13 +10,6 @@ import xml.etree.ElementTree as ET
 
 import ssd.transforms.functional as F
 
-
-VOC_CLASSES = (  # always index 0
-    'aeroplane', 'bicycle', 'bird', 'boat',
-    'bottle', 'bus', 'car', 'cat', 'chair',
-    'cow', 'diningtable', 'dog', 'horse',
-    'motorbike', 'person', 'pottedplant',
-    'sheep', 'sofa', 'train', 'tvmonitor')
 
 
 class VOCAnnotationTransform(object):
@@ -31,9 +25,8 @@ class VOCAnnotationTransform(object):
         width (int): width
     """
 
-    def __init__(self, class_to_ind=None, keep_difficult=False):
-        self.class_to_ind = class_to_ind or dict(
-            zip(VOC_CLASSES, range(len(VOC_CLASSES))))
+    def __init__(self, class_to_ind, keep_difficult=False):
+        self.class_to_ind = class_to_ind
         self.keep_difficult = keep_difficult
 
     def __call__(self, target, width, height):
@@ -67,7 +60,7 @@ class VOCAnnotationTransform(object):
         return res  # [[xmin, ymin, xmax, ymax, label_ind], ... ]
 
 
-class VOCDetection(torch.utils.data.Dataset):
+class VOCDetection(data.Dataset):
     """VOC Detection Dataset Object
 
     input is image, target is annotation
@@ -84,16 +77,24 @@ class VOCDetection(torch.utils.data.Dataset):
             (default: 'VOC2007')
     """
 
-    def __init__(self, root,
+    def __init__(self, 
+                 root,
+                 classes,
                  image_sets=[('2007', 'trainval'), ('2012', 'trainval')],
                  transform=None, 
-                 target_transform=VOCAnnotationTransform(),
+                 target_transform=None,
                  dataset_name='VOC0712'):
         self.root = root
         self.image_set = image_sets
         self.transform = transform
         self.target_transform = target_transform
         self.name = dataset_name
+
+        self.classes = classes
+        self.class_2_idx = {c: i for i, c in enumerate(self.classes)}
+
+        if self.target_transform:
+            self.target_transform = VOCAnnotationTransform(self.class_2_idx)
 
         self.ids = list()
         for (year, name) in image_sets:

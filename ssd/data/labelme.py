@@ -9,34 +9,46 @@ import cv2
 import numpy as np
 
 
-def transform_annots(target, width, height):
+class LabelmeAnnotationTransform(object):
 
+    def __init__(self, class2idx):
+        self.class2idx = class2idx
+
+    def __call__(self, target, width, height):
         res = []
-        for shapes in target['shapes']:
-            pts = sum(shapes['points'], [])
+        for shape in target['shapes']:
+            pts = sum(shape['points'], [])
             pts = [pts[0] / width, pts[1] / height,
                    pts[2] / width, pts[3] / height]
-            bndbox = pts + [0.]
+            bndbox = pts + [self.class2idx[shape['label']]]
             res.append(bndbox)
 
-        return res  # [[xmin, ymin, xmax, ymax, label_ind], ... ]
+        return res 
 
 
 class LabelmeDataset(data.Dataset):
 
     def __init__(self, 
                  root,
+                 classes,
                  transform=None, 
-                 target_transform=transform_annots,
+                 target_transform=None,
                  dataset_name='Labelme'):
+
         self.root = Path(root)
         self.transform = transform
         self.target_transform = target_transform
         self.name = dataset_name
-        
+
+        self.classes = classes
+        self.class_2_idx = {c: i for i, c in enumerate(self.classes)}
+
         self.annots = list(self.root.glob('*.json'))
         self.images = [Path(str(o).replace('.json', '.jpg')) 
                        for o in self.annots]
+
+        if self.target_transform is None:
+            self.target_transform = LabelmeAnnotationTransform(self.class_2_idx)
 
     def __getitem__(self, index):
         im, gt, h, w = self.pull_item(index)
@@ -59,9 +71,7 @@ class LabelmeDataset(data.Dataset):
         if self.transform is not None:
             target = np.array(target)
             img, boxes, labels = self.transform(img, target[:, :4], target[:, 4])
-            # to rgb
             img = img[:, :, (2, 1, 0)]
-            # img = img.transpose(2, 0, 1)
             target = np.hstack((boxes, np.expand_dims(labels, axis=1)))
 
         return torch.from_numpy(img).permute(2, 0, 1), target, height, width

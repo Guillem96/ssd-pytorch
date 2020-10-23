@@ -50,7 +50,7 @@ class MultiBoxLoss(nn.Module):
         device = loc_data.device
 
         bs = loc_data.size(0)
-        priors = priors[:loc_data.size(1), :]
+        priors = priors[:loc_data.size(1), :].to(device)
         num_priors = priors.size(0)
         num_classes = conf_data.size(-1)
 
@@ -59,11 +59,14 @@ class MultiBoxLoss(nn.Module):
         conf_t = torch.zeros(bs, num_priors, device=device).long()
 
         for idx in range(bs):
-            truths = targets[idx][:, :-1]
-            labels = targets[idx][:, -1]
-            defaults = priors.to(device)
-            match(self.threshold, truths, defaults, self.variance, labels,
-                  loc_t, conf_t, idx)
+            match(threshold=self.threshold, 
+                  truths=targets[idx][:, :-1], 
+                  priors=priors, 
+                  variances=self.variance, 
+                  labels=targets[idx][:, -1],
+                  loc_t=loc_t, 
+                  conf_t=conf_t, 
+                  idx=idx)
 
         pos = conf_t > 0
         num_pos = pos.sum(dim=1, keepdim=True)

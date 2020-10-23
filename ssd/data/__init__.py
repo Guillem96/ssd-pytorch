@@ -1,5 +1,5 @@
-from .voc0712 import VOCDetection, VOCAnnotationTransform, VOC_CLASSES
-from .coco import COCODetection, COCOAnnotationTransform, COCO_CLASSES, get_label_map
+from .voc0712 import VOCDetection, VOCAnnotationTransform
+from .coco import COCODetection, COCOAnnotationTransform
 from .labelme import LabelmeDataset
 
 import torch

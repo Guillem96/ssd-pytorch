@@ -1,0 +1,14 @@
+config:
+  name: labelme
+  num-classes: 2
+  image-size: 300
+  prior-boxes:
+    feature-maps: [38, 19, 10, 5, 3, 1]
+    min-sizes: [21, 45, 99, 153, 207, 261]
+    max-sizes: [45, 99, 153, 207, 261, 315]
+    aspect-ratios: [[0.5, 1, 2], [0.5, 1, 2], [0.5, 1, 2], [0.5, 1, 2], [1, 2], [1, 2]]
+    steps: [8, 16, 32, 64, 100, 300]
+    clip: true
+
+  classes:
+    - character

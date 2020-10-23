@@ -21,7 +21,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
               required=True, type=click.Path(exists=True, dir_okay=False),
               help='Configuration regarding dataset')
 @click.option('--basenet', 
-              default='vgg16_reducedfc.pth', 
+              default='models/vgg16_reducedfc.pth', 
               type=click.Path(exists=True, dir_okay=False),
               help='Pretrained base model')
 @click.option('--checkpoint', default=None, type=click.Path(dir_okay=False),
@@ -33,7 +33,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
               help='Times to iterate over the whole dataset')
 @click.option('--batch-size', default=16, type=int,
               help='Batch size for training')
-@click.option('--num_workers', default=4, type=int,
+@click.option('--num-workers', default=4, type=int,
               help='Number of workers used in dataloading')
 @click.option('--lr', '--learning-rate', default=1e-3, type=float,
               help='initial learning rate')
@@ -56,18 +56,21 @@ def train(dataset, dataset_root, config,
     checkpoint = Path(checkpoint) if checkpoint is not None else None
     save_dir = Path(save_dir)
     save_dir.mkdir(exist_ok=True, parents=True)
-    
-    cfg = yaml.safe_load(open(config))
+
+    cfg = yaml.safe_load(open(config))['config']
     transform = T.get_transforms(cfg['image-size'], training=True)
 
     if dataset == 'COCO':
         dataset = ssd.data.COCODetection(root=dataset_root,
+                                         classes=cfg['classes'],
                                          transform=transform)
     elif dataset == 'VOC':
         dataset = ssd.data.VOCDetection(root=dataset_root,
+                                        classes=cfg['classes'],
                                         transform=transform)
     else:
         dataset = ssd.data.LabelmeDataset(root=dataset_root,
+                                          classes=cfg['classes'],
                                           transform=transform)
 
     model = ssd.ssd(cfg, cfg['image-size'], cfg['num-classes'])

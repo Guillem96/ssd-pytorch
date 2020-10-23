@@ -9,40 +9,12 @@ import numpy as np
 import ssd.transforms.functional as F
 
 
-COCO_CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
-                'train', 'truck', 'boat', 'traffic light', 'fire', 'hydrant',
-                'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog',
-                'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra',
-                'giraffe', 'backpack', 'umbrella', 'handbag', 'tie',
-                'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball',
-                'kite', 'baseball bat', 'baseball glove', 'skateboard',
-                'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup',
-                'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple',
-                'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza',
-                'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed',
-                'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote',
-                'keyboard', 'cell phone', 'microwave oven', 'toaster', 'sink',
-                'refrigerator', 'book', 'clock', 'vase', 'scissors',
-                'teddy bear', 'hair drier', 'toothbrush')
-
-
-def get_label_map(label_file):
-    label_map = {}
-    labels = open(label_file, 'r')
-    for line in labels:
-        ids = line.split(',')
-        label_map[int(ids[0])] = int(ids[1])
-    return label_map
-
-
 class COCOAnnotationTransform(object):
     """Transforms a COCO annotation into a Tensor of bbox coords and label index
     Initialized with a dictionary lookup of classnames to indexes
     """
-    def __init__(self, root):
-        self.root = Path(root)
-        labels_path = self.root / 'coco_labels.txt'
-        self.label_map = get_label_map(str(labels_path))
+    def __init__(self, label_map):
+        self.label_map = label_map
 
     def __call__(self, target, width, height):
         """
@@ -83,6 +55,7 @@ class COCODetection(torch.utils.data.Dataset):
 
     def __init__(self,
                  root,
+                 classes,
                  image_set='trainval35k',
                  transform=None,
                  target_transform=None,
@@ -101,9 +74,12 @@ class COCODetection(torch.utils.data.Dataset):
         self.transform = transform
         self.target_transform = target_transform
         self.name = dataset_name
+        
+        self.classes = classes
+        self.class_2_idx = {c: i for i, c in enumerate(self.classes)}
 
         if self.target_transform is None:
-            self.target_transform = COCOAnnotationTransform(root)
+            self.target_transform = COCOAnnotationTransform(self.class_2_idx)
 
     def __getitem__(self, index):
         """
