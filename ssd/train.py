@@ -119,6 +119,7 @@ def train(dataset, dataset_root, config,
             loss = loss_l + loss_c
             optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 5.)
             optimizer.step()
 
             if (i + 1) % 10 == 0:

@@ -91,7 +91,7 @@ class MultiBoxLoss(nn.Module):
         num_neg = torch.clamp(self.negpos_ratio * num_pos, 
                               max=pos.size(1) - 1)
         loss_c_neg = loss_c * ~pos
-        loss_c_neg, _ = loss_c.sort(1, descending=True)
+        loss_c_neg, _ = loss_c_neg.sort(1, descending=True)
         neg_mask = torch.zeros_like(loss_c_neg)
         neg_mask[torch.arange(bs), num_neg.view(-1)] = 1.
         neg_mask = 1 - neg_mask.cumsum(-1)

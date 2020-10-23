@@ -1,3 +1,5 @@
+import yaml
+
 import click
 import cv2
 
@@ -15,10 +17,12 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
               type=click.Path(exists=True, dir_okay=False))
 @click.option('--config',
               required=True, type=click.Path(exists=True, dir_okay=False))
-def inference(im_path, checkpoint, config):
+@click.option('-o', '--output',
+              default=None, type=click.Path(dir_okay=False))
+def inference(im_path, checkpoint, config, output):
 
-    cfg = yaml.safe_load(open(config))
-    idx_to_class = ssd.data.VOC_CLASSES
+    cfg = yaml.safe_load(open(config))['config']
+    idx_to_class = cfg['classes']
 
     im = cv2.imread(im_path)
     im_in = T.get_transforms(cfg['image-size'], inference=True)(im)
@@ -50,5 +54,8 @@ def inference(im_path, checkpoint, config):
     boxes = boxes.int().cpu().numpy().tolist()
 
     im = ssd.viz.draw_boxes(im, boxes, names)
+    if output is not None:
+        cv2.imwrite(output, im)
+
     cv2.imshow('prediction', im)
     cv2.waitKey(0)

@@ -2,8 +2,7 @@
 
 Modern PyTorch SSD implementation.
 
-This implementation is completely based from the one made by [amdegroot](https://github.com/amdegroot/ssd.pytorch), therefore all kudos for him.
-
+This implementation is completely based from the one made by [amdegroot](https://github.com/amdegroot/ssd.pytorch), therefore all credits to him.
 
 ## Training SSD
 
@@ -50,4 +49,30 @@ config:
     aspect-ratios: [[2], [2, 3], [2, 3], [2, 3], [2], [2]]
     steps: [8, 16, 32, 64, 100, 300]
     clip: true
+  classes:
+   - class1
+   - class2
+   - # ...
 ```
+
+# Try with a pretrained VOC model
+
+1. . Navigate to `models` directory and download all the pretrained models running:
+
+```bash
+$ download.sh
+```
+
+2. This time we are going to pay attention to the one named: `ssd300_mAP_77.43_v2.pth`
+
+3. Run the inference pipeline with the aforementioned model and the corresponding
+configuration file
+
+```bash
+$ python -m ssd inference images\dog.jpg \
+  --checkpoint models/ssd300_mAP_77.43_v2.pth \
+  --config configs/voc.yml \
+  --output images/dog-example.jpg # Optional path to store the results
+```
+
+<img src="images/dog-example.jpg" width=200>
