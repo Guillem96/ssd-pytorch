@@ -248,7 +248,7 @@ class RandomSampleCrop(object):
                 rect = np.array([int(left), int(top), int(left+w), int(top+h)])
 
                 # calculate IoU (jaccard overlap) b/t the cropped and gt boxes
-                overlap = jaccard_numpy(boxes, rect)
+                overlap = _jaccard_numpy(boxes, rect)
 
                 # is min and max overlap constraint satisfied? if not try again
                 if overlap.min() < min_iou and max_iou < overlap.max():
@@ -390,12 +390,12 @@ def get_transforms(size, mean=MEANS, training=True, inference=False):
             ConvertFromInts(),
             ToAbsoluteCoords(),
             PhotometricDistort(),
-            Expand(self.mean),
+            Expand(mean),
             RandomSampleCrop(),
             RandomMirror(),
             ToPercentCoords(),
-            Resize(self.size),
-            SubtractMeans(self.mean)
+            Resize(size),
+            SubtractMeans(mean)
         ])
     else:
         return CaffePreprocessing(size, mean)
@@ -419,7 +419,7 @@ def _jaccard_numpy(box_a, box_b):
     Return:
         jaccard overlap: Shape: [box_a.shape[0], box_a.shape[1]]
     """
-    inter = intersect(box_a, box_b)
+    inter = _intersect(box_a, box_b)
     area_a = ((box_a[:, 2]-box_a[:, 0]) *
               (box_a[:, 3]-box_a[:, 1]))  # [A,B]
     area_b = ((box_b[2]-box_b[0]) *

@@ -100,9 +100,9 @@ def train(dataset, dataset_root, config,
         collate_fn=ssd.data.detection_collate,
         pin_memory=True)
 
-    metrics = {}
     steps_per_epoch = len(dataset) // batch_size
     for epoch in range(1, epochs + 1):
+        metrics = {}
         for i, (images, targets) in enumerate(data_loader):
             images = images.to(device)
             targets = [o.to(device) for o in targets]
@@ -124,7 +124,7 @@ def train(dataset, dataset_root, config,
                 print(f'Epoch [{epoch} {i}/{steps_per_epoch}] {logs}')
 
         lr_scheduler.step()
-        model_f = save_dir / f'{args.dataset}_{epoch}.pt'
+        model_f = save_dir / f'{dataset.name}_{epoch}.pt'
         torch.save(model.state_dict(), model_f)
 
 
