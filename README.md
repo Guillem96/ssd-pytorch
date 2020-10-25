@@ -55,7 +55,7 @@ config:
    - # ...
 ```
 
-# Try with a pretrained VOC model
+## Try with a pretrained VOC model
 
 1. . Navigate to `models` directory and download all the pretrained models running:
 
@@ -76,3 +76,30 @@ $ python -m ssd inference images\dog.jpg \
 ```
 
 <img src="images/dog-example.jpg" width=200>
+
+## Evaluate with COCO metrics
+
+```bash
+$ python -m ssd eval --dataset <dataset-type> \ # [labelme|VOC|COCO]
+    --dataset-root <path-to-dataset> \
+    --config configs/voc.yml \ # Prepare your desired configuration file
+    --checkpoint <path-to-model> # Trained model to be evaluated
+```
+
+## Logging with Tensorboard
+
+To log your training job with Tensorboard, just add the `--logdir` option to the training script.
+
+![](images/tb.jpg)
+
+## Export the model to TorchScript
+
+Trace and serialize the model with `torch.jit` to enhance its performance. Also you will be able to load the model outside this project without any code.
+
+```bash
+$ python -m ssd jit-serialize \
+  --checkpoint <path-to-model> \
+  --config <path-to-config> \
+  --output file.pt \
+  --image image-test.jpt # Optional parameter to make a sanity check (Recommended)
+```

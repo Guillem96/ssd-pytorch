@@ -135,7 +135,7 @@ def point_form(boxes):
         boxes: (tensor) Converted xmin, ymin, xmax, ymax form of boxes.
     """
     return torch.cat((boxes[:, :2] - boxes[:, 2:]/2,     # xmin, ymin
-                     boxes[:, :2] + boxes[:, 2:]/2), 1)  # xmax, ymax
+                      boxes[:, :2] + boxes[:, 2:]/2), 1)  # xmax, ymax
 
 
 def center_size(boxes):

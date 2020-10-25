@@ -16,3 +16,7 @@ def caffe_preprocessing(image, size, mean=MEANS):
 
 def np_to_tensor(image):
     return torch.from_numpy(image).permute(2, 0, 1)
+
+
+def tensor_to_np(image):
+    return image.permute(1, 2, 0).numpy()

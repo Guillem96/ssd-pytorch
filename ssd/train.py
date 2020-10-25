@@ -1,11 +1,15 @@
 import click
 import yaml
 from pathlib import Path
+from datetime import datetime
 
 import torch
+from torch.utils.tensorboard import SummaryWriter
 
 import ssd
 import ssd.transforms as T
+import ssd.transforms.functional as F
+
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -45,15 +49,20 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
               help='Gamma update for SGD')
 @click.option('--step-size', default=4, type=int,
               help='Decrease the learning rate by gamma after n epochs steps')
-
+@click.option('--logdir', default=None, 
+              type=click.Path(file_okay=False),
+              help='Dataset root directory path')
 def train(dataset, dataset_root, config,
           basenet, checkpoint, save_dir,
           epochs, batch_size, num_workers,
-          lr, momentum, wd, gamma, step_size):
-
+          lr, momentum, wd, gamma, step_size,
+          logdir):
+    now = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     dataset_root = Path(dataset_root)
     basenet = Path(basenet)
+    logdir = Path(logdir) / now
     checkpoint = Path(checkpoint) if checkpoint is not None else None
+
     save_dir = Path(save_dir)
     save_dir.mkdir(exist_ok=True, parents=True)
 
@@ -61,17 +70,26 @@ def train(dataset, dataset_root, config,
     transform = T.get_transforms(cfg['image-size'], training=True)
 
     if dataset == 'COCO':
+        viz_dataset = ssd.data.COCODetection(root=dataset_root,
+                                             classes=cfg['classes'])
         dataset = ssd.data.COCODetection(root=dataset_root,
                                          classes=cfg['classes'],
                                          transform=transform)
     elif dataset == 'VOC':
+        viz_dataset = ssd.data.VOCDetection(root=dataset_root,
+                                            classes=cfg['classes'])
+
         dataset = ssd.data.VOCDetection(root=dataset_root,
                                         classes=cfg['classes'],
                                         transform=transform)
     else:
+        viz_dataset = ssd.data.LabelmeDataset(root=dataset_root,
+                                              classes=cfg['classes'])
         dataset = ssd.data.LabelmeDataset(root=dataset_root,
                                           classes=cfg['classes'],
                                           transform=transform)
+
+    tb_writter = SummaryWriter(str(logdir), flush_secs=10)
 
     model = ssd.ssd(cfg, cfg['image-size'], cfg['num-classes'])
     if checkpoint is not None:
@@ -105,31 +123,71 @@ def train(dataset, dataset_root, config,
 
     steps_per_epoch = len(dataset) // batch_size
     for epoch in range(1, epochs + 1):
-        metrics = {}
-        for i, (images, targets) in enumerate(data_loader):
-            images = images.to(device)
-            targets = [o.to(device) for o in targets]
+        ssd.engine.train_one_epoch(
+            model=model,
+            optimizer=optimizer,
+            criterion_fn=criterion,
+            data_loader=data_loader,
+            epoch=epoch,
+            device=device,
+            tb_writer=tb_writter)
 
-            out = model(images)
-
-            loss_l, loss_c = criterion(out, targets)
-            metrics['loc_loss'] = metrics.get('loc_loss', 0.) + loss_l.item()
-            metrics['conf_loss'] = metrics.get('conf_loss', 0.) + loss_c.item()
-
-            loss = loss_l + loss_c
-            optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 5.)
-            optimizer.step()
-
-            if (i + 1) % 10 == 0:
-                means = {k: v / i for k, v in metrics.items()}
-                logs = ' '.join(f'{k}: {v:.4f}' for k, v in means.items())
-                print(f'Epoch [{epoch} {i}/{steps_per_epoch}] {logs}')
-
+        _log_predictions(model, viz_dataset, epoch, tb_writter)
         lr_scheduler.step()
         model_f = save_dir / f'{dataset.name}_{epoch}.pt'
         torch.save(model.state_dict(), model_f)
+
+
+@torch.no_grad()
+def _log_predictions(model, dataset, epoch, tb_writer=None):
+    if tb_writer is None: 
+        return
+
+    import matplotlib.pyplot as plt
+
+    model.eval()
+
+    tfm = T.get_transforms(300, inference=True)
+    rand_idx = torch.randint(size=(4,), high=len(dataset)).tolist()
+    images = [dataset.pull_item(i) for i in rand_idx]
+    images_in = [(tfm(F.tensor_to_np(o[0])).unsqueeze(0).to(device), o[2], o[3]) 
+                 for o in images]
+    predictions = [_parse_detections(model(im), (h, w), device) 
+                   for im, h, w in images_in]
+
+    plt.figure(figsize=(20, 20))
+
+    for i, (im, p) in enumerate(zip(images, predictions), start=1):
+        im = F.tensor_to_np(im[0])
+        true_mask = p['scores'] > 0.8
+        scores = p['scores'][true_mask]
+        boxes = p['boxes'][true_mask]
+
+        plt.subplot(2, 2, i)
+        viz_im = ssd.viz.draw_boxes(im.copy(), boxes.tolist(), [''] * len(boxes))
+        plt.imshow(viz_im[...,::-1])
+        plt.axis('off')
+
+    tb_writer.add_figure('Prediction Epoch ' + str(epoch), plt.gcf())
+
+
+def _parse_detections(detections, im_shape, device):
+    detections = detections[0]
+
+    scores = detections[..., 0].t()
+    boxes = detections[..., 1:].permute(1, 0, 2)
+
+    scale = torch.as_tensor([im_shape[1], im_shape[0]] * 2, device=device)
+    scale.unsqueeze_(0)
+
+    scores, classes = scores.max(-1)
+    boxes = boxes[torch.arange(len(scores)), classes] * scale
+
+    boxes = boxes.int().cpu()
+    classes = classes.cpu() - 1
+    scores = scores.cpu()
+
+    return dict(boxes=boxes, labels=classes, scores=scores)
 
 
 if __name__ == '__main__':
