@@ -28,7 +28,7 @@ def inference(im_path, checkpoint, config, output):
     im_in = T.get_transforms(cfg['image-size'], inference=True)(im)
     im_in = im_in.unsqueeze(0).to(device)
 
-    model = ssd.ssd(cfg, cfg['image-size'], cfg['num-classes'])
+    model = ssd.SSD300(cfg)
     model.eval()
 
     checkpoint = torch.load(checkpoint, map_location=device)
@@ -38,20 +38,15 @@ def inference(im_path, checkpoint, config, output):
     with torch.no_grad():
         detections = model(im_in)[0]
 
-    scores = detections[..., 0].t()
-    boxes = detections[..., 1:].permute(1, 0, 2)
-
-    scale = torch.as_tensor([im.shape[1], im.shape[0]] * 2, device=device)
+    scale = torch.as_tensor([im.shape[1], im.shape[0]] * 2)
     scale.unsqueeze_(0)
 
-    scores, classes = scores.max(-1)
-    true_mask = scores > .5
-    scores = scores[true_mask]
-    
-    classes = classes[true_mask]
-    names = [idx_to_class[i - 1] for i in classes.cpu().tolist()]
-    boxes = boxes[true_mask, classes] * scale
-    boxes = boxes.int().cpu().numpy().tolist()
+    true_mask = detections['scores'] > .5
+    scores = detections['scores'][true_mask].cpu().tolist()
+    boxes = (detections['boxes'][true_mask].cpu() * scale).int().tolist()
+    labels = detections['labels'][true_mask].cpu().tolist()
+
+    names = [idx_to_class[i - 1] for i in labels]
 
     im = ssd.viz.draw_boxes(im, boxes, names)
     if output is not None:

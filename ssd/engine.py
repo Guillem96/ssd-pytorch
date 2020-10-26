@@ -1,6 +1,8 @@
 import math
 import time
 
+import tqdm.auto as tqdm
+
 import torch
 import numpy as np
 
@@ -75,16 +77,15 @@ def evaluate(model, dataset, coco, device):
     running_time = 0.
     running_eval_time = 0.
 
-    for image_id in range(len(dataset)):
+    for image_id in tqdm.trange(len(dataset), desc="COCO Evaluation"):
         image, targets = dataset[image_id]
         image = image.unsqueeze(0).to(device)
         coco_im = coco.dataset['images'][image_id]
-        # targets = _parse_targets(targets, coco_im)
 
         torch.cuda.synchronize()
         model_time = time.time()
         outputs = model(image)
-        detections = _parse_detections(outputs, coco_im, device)
+        detections = _parse_detections(outputs, coco_im)
         model_time = time.time() - model_time
         running_time += model_time
 
@@ -110,21 +111,14 @@ def evaluate(model, dataset, coco, device):
     return coco_evaluator
 
 
-def _parse_detections(detections, coco_im, device):
+def _parse_detections(detections, coco_im):
     detections = detections[0]
-    scores = detections[..., 0].t()
-    boxes = detections[..., 1:].permute(1, 0, 2)
 
     scale = torch.as_tensor([coco_im['width'], 
-                             coco_im['height']] * 2, 
-                             device=device)
-    scale.unsqueeze_(0)
+                             coco_im['height']] * 2)
 
-    scores, classes = scores.max(-1)
-    boxes = boxes[torch.arange(len(scores)), classes] * scale
+    scores = detections['scores'].cpu()
+    boxes = (detections['boxes'].cpu() * scale).int()
+    labels = detections['labels'].cpu() - 1
 
-    boxes = boxes.int().cpu()
-    classes = classes.cpu() - 1
-    scores = scores.cpu()
-
-    return dict(boxes=boxes, labels=classes, scores=scores)
+    return dict(boxes=boxes, labels=labels, scores=scores)

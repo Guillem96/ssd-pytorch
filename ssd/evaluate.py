@@ -41,10 +41,9 @@ def evaluate(dataset, dataset_root, config, checkpoint):
 
     print('Generating COCO dataset...',  end=' ')
     coco_dataset = get_coco_api_from_dataset(dataset)
-    print(coco_dataset.dataset['images'])
     print('done')
 
-    model = ssd.ssd(cfg, cfg['image-size'], cfg['num-classes'])
+    model = ssd.SSD300(cfg)
     model.eval()
     model.load_state_dict(torch.load(checkpoint, map_location=device))
     model.to(device)

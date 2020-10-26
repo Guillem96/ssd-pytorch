@@ -60,7 +60,7 @@ def train(dataset, dataset_root, config,
     now = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     dataset_root = Path(dataset_root)
     basenet = Path(basenet)
-    logdir = Path(logdir) / now
+    logdir = (Path(logdir) / now) if logdir is not None else None
     checkpoint = Path(checkpoint) if checkpoint is not None else None
 
     save_dir = Path(save_dir)
@@ -89,9 +89,12 @@ def train(dataset, dataset_root, config,
                                           classes=cfg['classes'],
                                           transform=transform)
 
-    tb_writter = SummaryWriter(str(logdir), flush_secs=10)
+    if logdir is not None:
+        tb_writter = SummaryWriter(str(logdir), flush_secs=10)
+    else:
+        tb_writter = None
 
-    model = ssd.ssd(cfg, cfg['image-size'], cfg['num-classes'])
+    model = ssd.SSD300(cfg)
     if checkpoint is not None:
         print(f'Resuming training, loading {str(checkpoint)}...')
         checkpoint = torch.load(checkpoint)
@@ -150,44 +153,27 @@ def _log_predictions(model, dataset, epoch, tb_writer=None):
     tfm = T.get_transforms(300, inference=True)
     rand_idx = torch.randint(size=(4,), high=len(dataset)).tolist()
     images = [dataset.pull_item(i) for i in rand_idx]
-    images_in = [(tfm(F.tensor_to_np(o[0])).unsqueeze(0).to(device), o[2], o[3]) 
-                 for o in images]
-    predictions = [_parse_detections(model(im), (h, w), device) 
-                   for im, h, w in images_in]
+    images_in = [tfm(F.tensor_to_np(o)).unsqueeze(0).to(device)
+                 for o, *_ in images]
+    predictions = [model(im)[0] for im in images_in]
 
     plt.figure(figsize=(20, 20))
 
     for i, (im, p) in enumerate(zip(images, predictions), start=1):
-        im = F.tensor_to_np(im[0])
+        im, _, h, w = im
+        scale = torch.as_tensor([w, h, w, h]).unsqueeze(0)
+
+        im = F.tensor_to_np(im)
+
         true_mask = p['scores'] > 0.8
-        scores = p['scores'][true_mask]
-        boxes = p['boxes'][true_mask]
+        boxes = p['boxes'][true_mask].cpu() * scale
 
         plt.subplot(2, 2, i)
-        viz_im = ssd.viz.draw_boxes(im.copy(), boxes.tolist(), [''] * len(boxes))
+        viz_im = ssd.viz.draw_boxes(im.copy(), boxes.int().tolist())
         plt.imshow(viz_im[...,::-1])
         plt.axis('off')
 
     tb_writer.add_figure('Prediction Epoch ' + str(epoch), plt.gcf())
-
-
-def _parse_detections(detections, im_shape, device):
-    detections = detections[0]
-
-    scores = detections[..., 0].t()
-    boxes = detections[..., 1:].permute(1, 0, 2)
-
-    scale = torch.as_tensor([im_shape[1], im_shape[0]] * 2, device=device)
-    scale.unsqueeze_(0)
-
-    scores, classes = scores.max(-1)
-    boxes = boxes[torch.arange(len(scores)), classes] * scale
-
-    boxes = boxes.int().cpu()
-    classes = classes.cpu() - 1
-    scores = scores.cpu()
-
-    return dict(boxes=boxes, labels=classes, scores=scores)
 
 
 if __name__ == '__main__':
