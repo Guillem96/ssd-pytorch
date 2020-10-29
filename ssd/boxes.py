@@ -88,7 +88,7 @@ class Detect(object):
         """
         device = loc_data.device
 
-        num = loc_data.size(0)  # batch size
+        num = loc_data.size(0) # batch size
         num_priors = prior_data.size(0)
         output = torch.zeros(num, self.num_classes, self.top_k, 5, 
                              device=device)

@@ -35,16 +35,15 @@ def trace_ssd(image, config, checkpoint, output):
         example.unsqueeze_(0)
 
     traced_ssd = torch.jit.trace(model, example)
-    files = torch.jit.DEFAULT_EXTRA_FILES_MAP
-    files['config'] = open(config).read()
+    files = {'classes': ','.join(cfg['classes'])}
     traced_ssd.save(output, files)
 
     # Sanitize check
-    files['config'] = ''
-    loaded_model = torch.jit.load(output, 
+    files['classes'] = ''
+    loaded_model = torch.jit.load(output,
                                   map_location=device, 
                                   _extra_files=files)
-    loaded_cfg = yaml.safe_load(files['config'])['config']
+    loaded_classes = files['classes'].decode().split(',')
     if image is not None:
         with torch.no_grad():
             boxes, labels, scores = loaded_model(example)
@@ -55,7 +54,7 @@ def trace_ssd(image, config, checkpoint, output):
         scores = scores[0][true_mask].cpu().tolist()
         boxes = (boxes[0][true_mask].cpu() * scale).int().tolist()
         labels = labels[0][true_mask].cpu().tolist()
-        names = [loaded_cfg['classes'][i - 1] for i in labels]
+        names = [loaded_classes[i - 1] for i in labels]
 
         im = ssd.viz.draw_boxes(im, boxes, names)
         cv2.imshow('traced', im)

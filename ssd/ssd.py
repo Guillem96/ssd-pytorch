@@ -36,14 +36,10 @@ class SSD300(nn.Module):
         self.priors = self.priorbox.forward()
 
         # SSD network
-        base = _vgg(_base[str(self.size)], 3)
-        extras = _add_extras(_extras[str(self.size)], 1024)
-        loc_head, conf_head = _multibox(base, 
-                                        extras, 
-                                        _mbox[str(self.size)], 
-                                        self.num_classes)
-
-        self.vgg = nn.ModuleList(base)
+        self.vgg = _vgg(_base["300"], 3)
+        extras = _add_extras(_extras["300"], 1024)
+        loc_head, conf_head = _multibox(self.vgg, extras, 
+                                        _mbox["300"], self.num_classes)
 
         # Layer learns to scale the l2 normalized features from conv4_3
         self.L2Norm = L2Norm(512, 20)
@@ -63,22 +59,42 @@ class SSD300(nn.Module):
 
     def _post_process_inference(self, detections):
         # detections: [BATCH, CLASSES, PRIORS, COORDS + SCORE]
-        # scores: [BATCH, PRIORS, CLASSES]
-        scores = detections[..., 0].permute(0, 2, 1)
-        
-        # boxes: [BATCH, PRIORS, CLASSES, COORDS]
-        boxes = detections[..., 1:].permute(0, 2, 1, 3)
+        bs = detections.size(0)
+        n_priors = detections.size(2)
+
+        # detections: [BATCH, PRIORS, CLASSES, COORDS + SCORE]
+        detections = detections.permute(0, 2, 1, 3)
+
+        # detections: [BATCH * PRIORS, CLASSES, COORDS + SCORE]
+        detections = detections.view(-1, self.num_classes, 5)
+
+        # scores: [BATCH * PRIORS, CLASSES]
+        scores = detections[..., 0]
+
+        # boxes: [BATCH * PRIORS, CLASSES, COORDS]
+        boxes = detections[..., 1:]
+
+        # scores: [BATCH * PRIORS]
+        # classes: [BATCH * PRIORS]
+        scores, classes = scores.max(-1)
+
+        # boxes: [BATCH * PRIORS, COORDS]
+        priors_r = torch.arange(boxes.size(0))
+        boxes = boxes[priors_r, classes]
+
+        # boxes: [BATCH, PRIORS, COORDS]
+        boxes = boxes.view(bs, n_priors, 4)
+
+        # classes: [BATCH, PRIORS]
+        classes = classes.view(bs, n_priors)
 
         # scores: [BATCH, PRIORS]
-        # classes: [BATCH, PRIORS]
-        scores, classes = scores.max(-1)
-        
-        if torch.jit.is_tracing():
-            # TODO: Build an indexer
-            boxes = torch.stack([b[torch.arange(len(b)), l] for b, l in zip(boxes, classes)])
+        scores = scores.view(bs, n_priors)
+
+        if torch._C._is_tracing(): # TODO: Wait for fix torch.jit.is_tracing():
             return boxes, classes, scores
 
-        return [dict(scores=s, boxes=b[torch.arange(len(s)), l], labels=l) 
+        return [dict(scores=s, boxes=b, labels=l) 
                 for s, b, l in zip(scores, boxes, classes)]
 
     def forward(self, x):
@@ -167,7 +183,8 @@ def _vgg(cfg, i, batch_norm=False):
 
     layers += [pool5, conv6, nn.ReLU(inplace=True), 
                conv7, nn.ReLU(inplace=True)]
-    return layers
+
+    return nn.Sequential(*layers)
 
 
 def _add_extras(cfg, i, batch_norm=False):
