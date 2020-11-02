@@ -34,7 +34,7 @@ def trace_ssd(image, config, checkpoint, output):
                                                 inference=True)(im)
         example.unsqueeze_(0)
 
-    traced_ssd = torch.jit.trace(model, example)
+    traced_ssd = torch.jit.script(model)
     files = {'classes': ','.join(cfg['classes'])}
     traced_ssd.save(output, files)
 

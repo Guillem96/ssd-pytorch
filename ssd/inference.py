@@ -8,8 +8,6 @@ import torch
 import ssd
 import ssd.transforms as T
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 
 @click.command()
 @click.argument('im_path', type=click.Path(exists=True, dir_okay=False))
@@ -22,6 +20,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 def inference(im_path, checkpoint, config, traced, output):
 
     if not traced:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
         cfg = yaml.safe_load(open(config))['config']
         idx_to_class = cfg['classes']
 
@@ -33,7 +33,6 @@ def inference(im_path, checkpoint, config, traced, output):
         model.to(device)
     else:
         device = torch.device('cpu')
-
         files = {'classes': ''}
         model = torch.jit.load(checkpoint, 
                                map_location=device, 
@@ -53,6 +52,7 @@ def inference(im_path, checkpoint, config, traced, output):
     scale.unsqueeze_(0)
 
     if not traced:
+        detections = detections[0]
         true_mask = detections['scores'] > .5
         scores = detections['scores'][true_mask].cpu().tolist()
         boxes = (detections['boxes'][true_mask].cpu() * scale).int().tolist()

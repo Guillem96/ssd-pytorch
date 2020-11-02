@@ -24,7 +24,10 @@ _mbox = {
 }
 
 
+
 class SSD300(nn.Module):
+
+    detect: Detect
 
     def __init__(self, cfg):
         super(SSD300, self).__init__()
@@ -36,7 +39,11 @@ class SSD300(nn.Module):
         self.priors = self.priorbox.forward()
 
         # SSD network
+        # https://discuss.pytorch.org/t/how-can-l-load-my-best-model-as-a-feature-extractor-evaluator/17254/6
+        self._mid_vgg_activation: torch.Tensor = None
         self.vgg = _vgg(_base["300"], 3)
+        self.vgg[22].register_forward_hook(self._get_activation)
+
         extras = _add_extras(_extras["300"], 1024)
         loc_head, conf_head = _multibox(self.vgg, extras, 
                                         _mbox["300"], self.num_classes)
@@ -51,6 +58,9 @@ class SSD300(nn.Module):
         self.detect = Detect(self.num_classes, 0, 200, 0.01, 0.45)
 
         self.apply(self._weights_init)
+
+    def _get_activation(self, model, input, output):
+        self._mid_vgg_activation = output 
 
     def _weights_init(self, m):
         if isinstance(m, nn.Conv2d):
@@ -91,11 +101,26 @@ class SSD300(nn.Module):
         # scores: [BATCH, PRIORS]
         scores = scores.view(bs, n_priors)
 
-        if torch._C._is_tracing(): # TODO: Wait for fix torch.jit.is_tracing():
+        if torch.jit.is_scripting():
             return boxes, classes, scores
 
         return [dict(scores=s, boxes=b, labels=l) 
                 for s, b, l in zip(scores, boxes, classes)]
+
+    def _get_sources(self, x):
+        sources = []
+        x = self.vgg(x)
+        s = self.L2Norm(self._mid_vgg_activation)
+        sources.append(s)
+        sources.append(x)
+
+         # apply extra layers and cache source layer outputs
+        for k, v in enumerate(self.extras):
+            x = F.relu(v(x), inplace=True)
+            if k % 2 == 1:
+                sources.append(x)
+
+        return x, sources
 
     def forward(self, x):
         """Applies network layers and ops on input image(s) x.
@@ -117,37 +142,22 @@ class SSD300(nn.Module):
                     3: priorbox layers, Shape: [2,num_priors*4]
         """
         device = x.device
-        sources = []
-
-        # apply vgg up to conv4_3 relu
-        for k in range(23):
-            x = self.vgg[k](x)
-
-        s = self.L2Norm(x)
-        sources.append(s)
-
-        # apply vgg up to fc7
-        for k in range(23, len(self.vgg)):
-            x = self.vgg[k](x)
-        sources.append(x)
-
-        # apply extra layers and cache source layer outputs
-        for k, v in enumerate(self.extras):
-            x = F.relu(v(x), inplace=True)
-            if k % 2 == 1:
-                sources.append(x)
+        x, sources = self._get_sources(x)
 
         # apply multibox head to source layers
-        loc = [l(x).permute(0, 2, 3, 1).contiguous() 
-               for x, l in zip(sources, self.loc)]
-        conf = [c(x).permute(0, 2, 3, 1).contiguous() 
-                for x, c in zip(sources, self.conf)]
+        conf = []
+        loc = []
+        for i, (loc_fn, conf_fn) in enumerate(zip(self.loc, self.conf)):
+            l = loc_fn(sources[i]).permute(0, 2, 3, 1).contiguous()
+            l = l.view(x.size(0), -1, 4)
+            loc.append(l)
 
-        loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
-        conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
+            c = conf_fn(sources[i]).permute(0, 2, 3, 1).contiguous()
+            c = c.view(x.size(0), -1, self.num_classes)
+            conf.append(c)
 
-        loc = loc.view(loc.size(0), -1, 4)
-        conf = conf.view(conf.size(0), -1, self.num_classes)
+        loc = torch.cat(loc, 1)
+        conf = torch.cat(conf, 1)
 
         if not self.training:
             conf = F.softmax(conf, -1)

@@ -65,7 +65,12 @@ class Detect(object):
     scores and threshold to a top_k number of output predictions for both
     confidence score and locations.
     """
-    def __init__(self, num_classes, bkg_label, top_k, conf_thresh, nms_thresh):
+    def __init__(self, 
+                 num_classes: int, 
+                 bkg_label: int, 
+                 top_k: int, 
+                 conf_thresh: float, 
+                 nms_thresh: float):
         self.num_classes = num_classes
         self.background_label = bkg_label
         self.top_k = top_k
@@ -97,7 +102,8 @@ class Detect(object):
 
         # Decode predictions into bboxes.
         for i in range(num):
-            decoded_boxes = decode(loc_data[i], prior_data, self.variance)
+            decoded_boxes = decode(loc_data[i], prior_data, 
+                                   torch.as_tensor(self.variance))
             # For each class, perform nms
             conf_scores = conf_preds[i].clone()
 
@@ -112,7 +118,7 @@ class Detect(object):
                 # idx of highest scoring and non-overlapping boxes per class
                 ids = torchvision.ops.nms(boxes, scores, self.nms_thresh)
                 ids = ids[:self.top_k]
-                count = len(ids)
+                count = ids.size(0)
 
                 output[i, cl, :count] = \
                     torch.cat((scores[ids[:count]].unsqueeze(1),
